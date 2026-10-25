@@ -115,10 +115,6 @@ const effects = await evaluate(`(() => {
     scrollProgress: getComputedStyle(document.documentElement).getPropertyValue('--scroll-progress').trim(),
     tiltX: productButton.style.getPropertyValue('--tilt-x'),
     tiltY: productButton.style.getPropertyValue('--tilt-y'),
-    pointerAuraDisplay: getComputedStyle(document.querySelector('.pointer-aura')).display,
-    heroSparkAnimation: getComputedStyle(document.querySelector('.hero-sparks i')).animationName,
-    cometAnimation: getComputedStyle(document.querySelector('.formula-comet')).animationName,
-    ritualScanAnimation: getComputedStyle(document.querySelector('.ritual-scan')).animationName,
   })))
 })()`)
 
@@ -153,15 +149,17 @@ const details = await evaluate(`(() => ({
 
 await evaluate(`document.querySelector('.modal-close').click()`)
 await wait(200)
-const showcaseBefore = await evaluate(`document.querySelector('.showcase-image img')?.currentSrc`)
-await evaluate(`document.querySelector('.showcase-arrows button:last-child').click()`)
-await wait(250)
-const showcase = await evaluate(`(() => ({
-  slides: document.querySelectorAll('.showcase-index button').length,
-  activeIndex: [...document.querySelectorAll('.showcase-index button')].findIndex((button) => button.classList.contains('active')),
-  imageChanged: document.querySelector('.showcase-image img')?.currentSrc !== ${JSON.stringify('SHOWCASE_BEFORE')},
-  title: document.querySelector('.showcase-caption strong')?.textContent,
-}))()`.replace(JSON.stringify('SHOWCASE_BEFORE'), JSON.stringify(showcaseBefore)))
+await evaluate(`(() => {
+  const section = document.querySelector('.bottle-scroll')
+  scrollTo(0, section.getBoundingClientRect().top + scrollY + (section.offsetHeight - innerHeight) * 0.6)
+})()`)
+await wait(2500)
+const bottle = await evaluate(`(() => ({
+  chapters: document.querySelectorAll('.bottle-chapter').length,
+  activeChapter: [...document.querySelectorAll('.bottle-chapter')].findIndex((chapter) => chapter.classList.contains('active')),
+  webgl: document.querySelector('.bottle-stage').classList.contains('is-3d'),
+  progress: document.querySelector('.bottle-stage').style.getPropertyValue('--bottle-progress'),
+}))()`)
 await evaluate(`document.querySelector('.photo-review-track button').click()`)
 await wait(180)
 const lightbox = await evaluate(`(() => ({
@@ -194,5 +192,5 @@ if (process.argv[3]) {
   await writeFile(process.argv[3], Buffer.from(capture.data, 'base64'))
 }
 
-console.log(JSON.stringify({ initial, productCards, effects, menu, product, details, showcase, lightbox, video }, null, 2))
+console.log(JSON.stringify({ initial, productCards, effects, menu, product, details, bottle, lightbox, video }, null, 2))
 socket.close()

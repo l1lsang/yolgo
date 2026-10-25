@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import './App.css'
+import type { BottleScene } from './bottleScene'
 import {
   brandImages,
   products,
@@ -10,40 +11,48 @@ import {
 
 const formatPrice = (price: number) => `${price.toLocaleString('ko-KR')}원`
 
-type EditorialSlide = {
-  image: string
-  mobileImage?: string
-  label: string
-  title: string
-  description: string
+type BottleChapter = {
+  title: React.ReactNode
+  body: string
+  // Scroll progress at which the bottle rests for this chapter (used when motion is reduced).
+  rest: number
+  // Scroll range in which the copy is shown: the bottle's hold in bottleScene.ts, so text never sits on the moving bottle.
+  shown: [number, number]
 }
 
-const editorialSlides: EditorialSlide[] = [
+const heroStats = [
+  { value: '2,004', unit: '+', label: '두 제품 누적 리뷰' },
+  { value: '68', unit: '%', label: '7일 후 손상모 개선' },
+  { value: '3–10', unit: 'MIN', label: '샴푸하듯 간편한 루틴' },
+  { value: '35', unit: '%', label: '국내산 쌀겨수 함유' },
+]
+
+const bottleImage = '/images/율고.webp'
+
+const bottleChapters: BottleChapter[] = [
   {
-    image: brandImages.colorBanner,
-    mobileImage: brandImages.colorBannerMobile,
-    label: 'COLOR RITUAL',
-    title: '순하게 물드는 시간',
-    description: '매일의 샴푸 루틴에 자연스럽게 스며드는 새치 케어',
+    title: <>자연을 담은 시간,<br /><em>한 병에 담다.</em></>,
+    body: '대한민국 자연의 본초를 담아 만든 두피 저자극 새치 염색샴푸.',
+    rest: 0.23,
+    shown: [0, 0.37],
   },
-  ...products.flatMap((product) => product.gallery.map((image, index) => ({
-    image,
-    label: product.id === 'color' ? 'COLOR TEXTURE' : 'REPAIR TEXTURE',
-    title: product.id === 'color' ? '본초가 만든 깊은 컬러' : '쌀과 생강의 영양감',
-    description: `${product.shortName} 제품 연출 이미지 ${index + 1}`,
-  }))),
   {
-    image: brandImages.repairBanner,
-    mobileImage: brandImages.repairBannerMobile,
-    label: 'REPAIR RITUAL',
-    title: '손상모에 채우는 밀도',
-    description: '쌀겨수와 생강추출물로 완성한 데일리 리페어 루틴',
+    title: <>샴푸하듯 3–10분,<br /><em>자연스러운 갈색으로.</em></>,
+    body: '마른 모발에 바르고 충분히 핸들링한 뒤 헹구면 끝. 매일의 샴푸 루틴 그대로 새치를 케어하세요.',
+    rest: 0.61,
+    shown: [0.5, 0.72],
+  },
+  {
+    title: <>독일 더마테스트<br /><em>EXCELLENT 등급.</em></>,
+    body: '두피에 닿는 시간까지 순하게. 1,895건의 누적 리뷰가 함께한 율고의 기준입니다.',
+    rest: 0.93,
+    shown: [0.84, 1],
   },
 ]
 
 const heroArtwork: Record<string, string> = {
-  color: '/images/generated/yulgo-color-hero-v2.png',
-  repair: '/images/generated/yulgo-repair-hero-v2.png',
+  color: '/images/generated/yulgo-color-hero-v2.webp',
+  repair: '/images/generated/yulgo-repair-hero-v2.webp',
 }
 
 type IconName =
@@ -82,6 +91,48 @@ function Icon({ name }: { name: IconName }) {
   )
 }
 
+const shouldCount = (value: string) =>
+  /\d/.test(value) && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+// Counts every number inside a stat string ("2,004", "3–10", "68%") up from zero once it scrolls into view.
+function CountUp({ value }: { value: string }) {
+  const ref = useRef<HTMLDataElement>(null)
+  const [progress, setProgress] = useState(() => (shouldCount(value) ? 0 : 1))
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element || !shouldCount(value)) return
+
+    let frame = 0
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return
+      observer.disconnect()
+      const start = performance.now()
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - start) / 1600)
+        setProgress(1 - (1 - t) ** 3)
+        if (t < 1) frame = requestAnimationFrame(tick)
+      }
+      frame = requestAnimationFrame(tick)
+    }, { threshold: 0.5 })
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+    }
+  }, [value])
+
+  const live = value.replace(/\d[\d,]*(?:\.\d+)?/g, (token) => {
+    const decimals = token.split('.')[1]?.length ?? 0
+    const current = Number(token.replace(/,/g, '')) * progress
+    if (decimals) return current.toFixed(decimals)
+    return token.includes(',') ? Math.round(current).toLocaleString('ko-KR') : String(Math.round(current))
+  })
+
+  // A <data> element so stat-block `span` rules (font size, margins) never reach the digits.
+  return <data className="count-up" ref={ref} value={value}>{live}</data>
+}
+
 function ProductModal({ product, onClose }: { product: Product; onClose: () => void }) {
   const [mainImage, setMainImage] = useState(product.image)
 
@@ -113,7 +164,6 @@ function ProductModal({ product, onClose }: { product: Product; onClose: () => v
           </div>
 
           <div className="modal-copy">
-            <span className="eyebrow">{product.label}</span>
             <h2>{product.name}</h2>
             <p className="modal-description">{product.description}</p>
 
@@ -139,7 +189,7 @@ function ProductModal({ product, onClose }: { product: Product; onClose: () => v
             <div className="modal-facts">
               {product.facts.map((fact) => (
                 <div key={fact.label}>
-                  <strong>{fact.value}</strong>
+                  <strong><CountUp value={fact.value} /></strong>
                   <span>{fact.label}</span>
                 </div>
               ))}
@@ -169,6 +219,138 @@ function ProductModal({ product, onClose }: { product: Product; onClose: () => v
   )
 }
 
+function BottleScroll({ onExplore }: { onExplore: () => void }) {
+  const sectionRef = useRef<HTMLElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const sceneRef = useRef<BottleScene | null>(null)
+  const progressRef = useRef(0)
+  const [chapter, setChapter] = useState(0)
+  const [copyShown, setCopyShown] = useState(true)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    const section = sectionRef.current
+    const stage = stageRef.current
+    if (!section || !stage) return
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const update = () => {
+      const bounds = section.getBoundingClientRect()
+      const travel = bounds.height - window.innerHeight
+      const progress = travel > 0 ? Math.min(1, Math.max(0, -bounds.top / travel)) : 0
+      const current = progress < 0.43 ? 0 : progress < 0.78 ? 1 : 2
+      const [from, to] = bottleChapters[current].shown
+      progressRef.current = reducedMotion ? bottleChapters[current].rest : progress
+      stage.style.setProperty('--bottle-progress', progress.toFixed(4))
+      sceneRef.current?.setProgress(progressRef.current)
+      setChapter(current)
+      setCopyShown(reducedMotion || (progress >= from && progress <= to))
+    }
+
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  useEffect(() => {
+    const section = sectionRef.current
+    const canvas = canvasRef.current
+    if (!section || !canvas) return
+
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let disposed = false
+    let visible = false
+    const visibility = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting
+      sceneRef.current?.setActive(visible)
+    })
+    // three.js is fetched only when the section is about to come into view.
+    const preload = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return
+      preload.disconnect()
+      import('./bottleScene')
+        .then(({ createBottleScene }) => createBottleScene(canvas, bottleImage, { still }))
+        .then((scene) => {
+          if (disposed) {
+            scene.dispose()
+            return
+          }
+          sceneRef.current = scene
+          scene.setProgress(progressRef.current)
+          scene.setActive(visible)
+          setReady(true)
+        })
+        .catch(() => setReady(false))
+    }, { rootMargin: '800px 0px' })
+
+    preload.observe(section)
+    visibility.observe(section)
+    return () => {
+      disposed = true
+      preload.disconnect()
+      visibility.disconnect()
+      sceneRef.current?.dispose()
+      sceneRef.current = null
+    }
+  }, [])
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'touch') return
+    const bounds = event.currentTarget.getBoundingClientRect()
+    sceneRef.current?.setPointer(
+      ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+      ((event.clientY - bounds.top) / bounds.height) * 2 - 1,
+    )
+  }
+
+  return (
+    <section ref={sectionRef} className="bottle-scroll" aria-labelledby="bottle-title">
+      <div
+        ref={stageRef}
+        className={`bottle-stage is-chapter-${chapter + 1} ${ready ? 'is-3d' : ''}`}
+        onPointerMove={onPointerMove}
+        onPointerLeave={() => sceneRef.current?.setPointer(0, 0)}
+      >
+        <div className="bottle-sky" aria-hidden="true">
+          <span className="bottle-moon" />
+          <span className="bottle-wordmark">MIRACLE 7</span>
+        </div>
+        <img className="bottle-fallback" src={bottleImage} alt="율고 자연을 담은 시간 미라클7 퀵커버 블랙 샴푸 자연갈색" />
+        <canvas ref={canvasRef} className="bottle-canvas" aria-hidden="true" />
+
+        <div className="bottle-copy">
+          {bottleChapters.map((item, index) => {
+            const Heading = index === 0 ? 'h2' : 'h3'
+            return (
+              <div className={`bottle-chapter ${index === chapter && copyShown ? 'active' : ''}`} key={item.body} inert={index !== chapter || !copyShown}>
+                <Heading id={index === 0 ? 'bottle-title' : undefined}>{item.title}</Heading>
+                <p>{item.body}</p>
+                {index === bottleChapters.length - 1 && (
+                  <button className="button button-light" type="button" onClick={onExplore}>
+                    제품 경험하기 <Icon name="arrow" />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="bottle-progress" aria-hidden="true">
+          <span>{String(chapter + 1).padStart(2, '0')}</span>
+          <i />
+          <span>{String(bottleChapters.length).padStart(2, '0')}</span>
+        </div>
+        <span className="bottle-hint" aria-hidden="true">SCROLL</span>
+      </div>
+    </section>
+  )
+}
+
 function App() {
   const [heroIndex, setHeroIndex] = useState(0)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
@@ -176,10 +358,8 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [videoPlaying, setVideoPlaying] = useState(false)
-  const [galleryIndex, setGalleryIndex] = useState(0)
 
   const activeProduct = products[heroIndex]
-  const activeSlide = editorialSlides[galleryIndex]
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -196,8 +376,6 @@ function App() {
   }, [])
 
   useEffect(() => {
-    let animationFrame = 0
-
     const updateScrollEffects = () => {
       const scrollable = document.documentElement.scrollHeight - window.innerHeight
       const progress = scrollable > 0 ? Math.min(window.scrollY / scrollable, 1) : 0
@@ -205,22 +383,9 @@ function App() {
       document.documentElement.style.setProperty('--page-shift', `${Math.min(window.scrollY * 0.04, 80)}px`)
     }
 
-    const onPointerMove = (event: PointerEvent) => {
-      window.cancelAnimationFrame(animationFrame)
-      animationFrame = window.requestAnimationFrame(() => {
-        document.documentElement.style.setProperty('--pointer-x', `${event.clientX}px`)
-        document.documentElement.style.setProperty('--pointer-y', `${event.clientY}px`)
-      })
-    }
-
     updateScrollEffects()
     window.addEventListener('scroll', updateScrollEffects, { passive: true })
-    window.addEventListener('pointermove', onPointerMove, { passive: true })
-    return () => {
-      window.cancelAnimationFrame(animationFrame)
-      window.removeEventListener('scroll', updateScrollEffects)
-      window.removeEventListener('pointermove', onPointerMove)
-    }
+    return () => window.removeEventListener('scroll', updateScrollEffects)
   }, [])
 
   useEffect(() => {
@@ -259,8 +424,6 @@ function App() {
     const y = (event.clientY - bounds.top) / bounds.height
     event.currentTarget.style.setProperty('--tilt-x', `${(0.5 - y) * 7}deg`)
     event.currentTarget.style.setProperty('--tilt-y', `${(x - 0.5) * 9}deg`)
-    event.currentTarget.style.setProperty('--shine-x', `${x * 100}%`)
-    event.currentTarget.style.setProperty('--shine-y', `${y * 100}%`)
   }
 
   const resetTilt = (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -271,7 +434,6 @@ function App() {
   return (
     <div className="site-shell">
       <div className="scroll-progress" aria-hidden="true"><span /></div>
-      <div className="pointer-aura" aria-hidden="true" />
       <a className="skip-link" href="#main">본문으로 바로가기</a>
 
       <div className="announcement">
@@ -318,18 +480,12 @@ function App() {
           <a href="#brand" onClick={closeMenu}>브랜드 스토리 <Icon name="arrow" /></a>
         </nav>
         <div className="mobile-menu-benefit">
-          <span>WELCOME BENEFIT</span>
           <strong>회원가입 즉시 3,000원 적립</strong>
         </div>
       </div>
 
       <main id="main">
         <section id="top" className={`hero hero-${activeProduct.id}`} aria-label="율고 대표 상품">
-          <div className="hero-aurora hero-aurora-one" aria-hidden="true" />
-          <div className="hero-aurora hero-aurora-two" aria-hidden="true" />
-          <div className="hero-prism hero-prism-one" aria-hidden="true" />
-          <div className="hero-prism hero-prism-two" aria-hidden="true" />
-          <div className="hero-sparks" aria-hidden="true"><i /><i /><i /><i /></div>
           <span className="hero-wordmark" aria-hidden="true">YULGO</span>
           <div className="hero-media" aria-live="polite">
             {products.map((product, index) => (
@@ -341,7 +497,6 @@ function App() {
           </div>
           <div className="hero-inner">
             <div className="hero-copy" key={activeProduct.id}>
-              <span className="eyebrow">NATURE, TIME &amp; HAIR</span>
               {activeProduct.id === 'color' ? (
                 <h1>새치는 가볍게,<br /><em>자연은 깊게.</em></h1>
               ) : (
@@ -357,11 +512,11 @@ function App() {
             </div>
           </div>
 
-          <div className="hero-proof" aria-label={`${activeProduct.shortName} 핵심 정보`}>
-            {activeProduct.facts.map((fact) => (
-              <div key={fact.label}>
-                <strong>{fact.value}</strong>
-                <span>{fact.label}</span>
+          <div className="hero-proof" aria-label="율고 핵심 수치">
+            {heroStats.map((stat) => (
+              <div key={stat.label}>
+                <strong><CountUp value={stat.value} /><small>{stat.unit}</small></strong>
+                <span>{stat.label}</span>
               </div>
             ))}
           </div>
@@ -375,22 +530,10 @@ function App() {
             </div>
             <button type="button" onClick={() => setHeroIndex((heroIndex + 1) % products.length)} aria-label="다음 상품"><Icon name="chevronRight" /></button>
           </div>
-          <div className="hero-edition" aria-hidden="true">
-            <span>YULGO<br />HAIR LAB</span>
-            <strong>01—26</strong>
-          </div>
-        </section>
-
-        <section className="trust-strip" aria-label="율고 핵심 혜택">
-          <div><strong>2,004<small>+</small></strong><span>두 제품 누적 리뷰</span></div>
-          <div><strong>68<small>%</small></strong><span>7일 후 손상모 개선</span></div>
-          <div><strong>3–10<small>MIN</small></strong><span>샴푸하듯 간편한 루틴</span></div>
-          <div><strong>35<small>%</small></strong><span>국내산 쌀겨수 함유</span></div>
         </section>
 
         <section id="products" className="section products-section">
           <div className="section-heading" data-reveal>
-            <span className="eyebrow">THE YULGO COLLECTION</span>
             <h2>오늘의 모발에 필요한<br /><em>두 가지 자연의 시간</em></h2>
             <p>새치 커버부터 손상모 리페어까지. 율고의 두 제품을 한눈에 비교해 보세요.</p>
           </div>
@@ -399,12 +542,11 @@ function App() {
             {products.map((product, index) => (
               <article className={`product-card product-card-${product.id}`} data-reveal key={product.id} style={{ '--delay': `${index * 120}ms` } as React.CSSProperties}>
                 <span className="product-card-number" aria-hidden="true">0{index + 1}</span>
-                <button className="product-image-button tilt-surface" type="button" onPointerMove={updateTilt} onPointerLeave={resetTilt} onClick={() => setSelectedProduct(product)} aria-label={`${product.shortName} 상세 보기`}>
+                <button className="product-image-button" type="button" onPointerMove={updateTilt} onPointerLeave={resetTilt} onClick={() => setSelectedProduct(product)} aria-label={`${product.shortName} 상세 보기`}>
                   <img src={product.image} alt={product.shortName} />
                   <span>VIEW DETAILS <Icon name="plus" /></span>
                 </button>
                 <div className="product-info">
-                  <span className="eyebrow">{product.label}</span>
                   <h3>{product.shortName}</h3>
                   <p>{product.description}</p>
                   <div className="product-meta">
@@ -421,90 +563,53 @@ function App() {
               </article>
             ))}
           </div>
+
+          <div className="benefit-strip" data-reveal>
+            <a className="benefit-item" href="http://pf.kakao.com/_xoqxalxj" target="_blank" rel="noreferrer">
+              <img src={brandImages.kakaoBenefit} alt="" />
+              <span className="benefit-text"><small>카카오톡 채널</small><strong>채널 추가하고 2,000원 할인 쿠폰</strong></span>
+              <em><span>혜택 받기</span><Icon name="arrow" /></em>
+            </a>
+            <a className="benefit-item" href="https://yulgo.co.kr/member/join.html" target="_blank" rel="noreferrer">
+              <img src={brandImages.signupBenefit} alt="" />
+              <span className="benefit-text"><small>율고 공식몰 회원가입</small><strong>가입 즉시 3,000원 적립</strong></span>
+              <em><span>가입하기</span><Icon name="arrow" /></em>
+            </a>
+          </div>
         </section>
 
         <section className="kinetic-band" aria-label="율고 브랜드 키워드">
+          {/* Each half repeats the words four times so it is wider than even a 4K screen; the loop never shows a gap. */}
           <div className="kinetic-track" aria-hidden="true">
             {[0, 1].map((loop) => (
               <div key={loop}>
-                <span>NATURE</span><i>×</i><span>SCIENCE</span><i>×</i><span>TIME</span><i>×</i><strong>YULGO</strong><i>×</i>
+                {[0, 1, 2, 3].map((repeat) => (
+                  <Fragment key={repeat}>
+                    <span>NATURE</span><i>×</i><span>SCIENCE</span><i>×</i><span>TIME</span><i>×</i><strong>YULGO</strong><i>×</i>
+                  </Fragment>
+                ))}
               </div>
             ))}
-          </div>
-        </section>
-
-        <section className="formula-universe" aria-labelledby="formula-title">
-          <div className="formula-noise" aria-hidden="true" />
-          <div className="formula-comet" aria-hidden="true" />
-          <span className="formula-index" aria-hidden="true">FORMULA 01 / 02</span>
-          <div className="formula-copy" data-reveal>
-            <span className="eyebrow">YULGO HAIR LAB</span>
-            <h2 id="formula-title">자연은 깊게,<br /><em>효능은 선명하게.</em></h2>
-            <p>익숙한 자연 원료를 오늘의 헤어 고민에 맞는 비율과 방식으로 다시 설계합니다.</p>
-          </div>
-          <div className="formula-orbit" aria-label="율고 제품 핵심 수치">
-            <div className="orbit-ring orbit-ring-one" aria-hidden="true" />
-            <div className="orbit-ring orbit-ring-two" aria-hidden="true" />
-            <div className="formula-core"><small>YULGO</small><strong>本草</strong><span>HAIR FORMULA</span></div>
-            <div className="formula-node node-one"><strong>35%</strong><span>국내산 쌀겨수</span></div>
-            <div className="formula-node node-two"><strong>68%</strong><span>손상모 개선</span></div>
-            <div className="formula-node node-three"><strong>3–10</strong><span>간편한 사용 시간</span></div>
-            <div className="formula-node node-four"><strong>EXCELLENT</strong><span>더마테스트</span></div>
           </div>
         </section>
 
         <section id="ritual" className="ritual-section">
           <img src={brandImages.ritual} alt="풍성한 거품과 함께 사용하는 율고 블루밍 리페어 샴푸" />
           <div className="ritual-overlay" />
-          <div className="ritual-scan" aria-hidden="true" />
           <span className="ritual-wordmark" aria-hidden="true">RITUAL</span>
           <div className="ritual-copy" data-reveal>
-            <span className="eyebrow">OUR STANDARD</span>
-            <h2>씻어내는 짧은 시간도<br /><em>모발을 위한 케어가 되도록.</em></h2>
+            <h2>씻어내는 <span className="keep">짧은 시간도</span><br /><em>모발을 위한 <span className="keep">케어가 되도록.</span></em></h2>
             <p>국내산 본초와 기능성 원료를 세심하게 배합해 편안한 사용감과 눈에 보이는 변화를 함께 고민합니다.</p>
             <a className="button button-light" href="#guide">사용 루틴 보기 <Icon name="arrow" /></a>
           </div>
           <div className="ritual-stats">
-            <div><strong>35<small>%</small></strong><span>쌀겨수 함유</span></div>
-            <div><strong>68<small>%</small></strong><span>7일 후 손상모 개선</span></div>
+            <div><strong><CountUp value="35" /><small>%</small></strong><span>쌀겨수 함유</span></div>
+            <div><strong><CountUp value="68" /><small>%</small></strong><span>7일 후 손상모 개선</span></div>
             <div><strong>EXCELLENT</strong><span>더마테스트 등급</span></div>
           </div>
         </section>
 
-        <section className="showcase-section" aria-labelledby="showcase-title">
-          <div className="showcase-ambient" aria-hidden="true">
-            <img key={activeSlide.image} src={activeSlide.image} alt="" />
-          </div>
-          <div className="showcase-prism" aria-hidden="true" />
-          <div className="showcase-heading" data-reveal>
-            <span className="eyebrow">TEXTURE &amp; RITUAL</span>
-            <h2 id="showcase-title">한 장면씩 천천히,<br /><em>율고의 결을 보다.</em></h2>
-          </div>
-          <div className="showcase-stage" data-reveal>
-            <button className={`showcase-image tilt-surface ${activeSlide.mobileImage ? 'showcase-image-banner' : ''}`} type="button" onPointerMove={updateTilt} onPointerLeave={resetTilt} onClick={() => setSelectedPhoto(activeSlide.image)} aria-label={`${activeSlide.description} 크게 보기`}>
-              <picture key={activeSlide.image}>
-                {activeSlide.mobileImage && <source media="(max-width: 700px)" srcSet={activeSlide.mobileImage} />}
-                <img src={activeSlide.image} alt={activeSlide.description} />
-              </picture>
-              <span className="showcase-expand"><Icon name="plus" /> EXPAND</span>
-            </button>
-            <div className="showcase-caption">
-              <span>{String(galleryIndex + 1).padStart(2, '0')} / {String(editorialSlides.length).padStart(2, '0')}</span>
-              <div><small>{activeSlide.label}</small><strong>{activeSlide.title}</strong></div>
-              <div className="showcase-arrows">
-                <button type="button" onClick={() => setGalleryIndex((galleryIndex - 1 + editorialSlides.length) % editorialSlides.length)} aria-label="이전 이미지"><Icon name="chevronLeft" /></button>
-                <button type="button" onClick={() => setGalleryIndex((galleryIndex + 1) % editorialSlides.length)} aria-label="다음 이미지"><Icon name="chevronRight" /></button>
-              </div>
-            </div>
-            <div className="showcase-index" aria-label="율고 이미지 선택">
-              {editorialSlides.map((slide, index) => (
-                <button type="button" key={`${slide.image}-${index}`} className={index === galleryIndex ? 'active' : ''} onClick={() => setGalleryIndex(index)} aria-label={`${index + 1}번 이미지 ${slide.title}`}>
-                  <span>{String(index + 1).padStart(2, '0')}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
+        <BottleScroll onExplore={() => setSelectedProduct(products[0])} />
 
         <section id="guide" className="guide-section">
           <div className="guide-video" data-reveal>
@@ -524,7 +629,6 @@ function App() {
             )}
           </div>
           <div className="guide-copy" data-reveal>
-            <span className="eyebrow">HOW TO USE YULGO</span>
             <h2>바쁜 하루에도<br /><em>샴푸하듯 간편하게</em></h2>
             <div className="steps">
               <div><span>01</span><p><strong>마른 모발에 도포</strong>새치가 신경 쓰이는 뿌리와 헤어라인부터 고르게 발라주세요.</p></div>
@@ -537,42 +641,49 @@ function App() {
 
         <section id="reviews" className="reviews-section">
           <div className="reviews-heading section-heading" data-reveal>
-            <span className="eyebrow">REAL REVIEWS</span>
             <h2>먼저 써본 고객들의<br /><em>솔직한 변화 이야기</em></h2>
             <p>기존 율고 공식몰과 외부 구매처에 등록된 실제 구매 후기를 옮겼습니다.</p>
           </div>
 
-          <div className="testimonial-track">
-            {testimonials.map((review, index) => (
-              <article className="testimonial" key={review.title} data-reveal style={{ '--delay': `${(index % 3) * 80}ms` } as React.CSSProperties}>
-                <div className="stars">{Array.from({ length: 5 }).map((_, star) => <Icon name="star" key={star} />)}</div>
-                <h3>{review.title}</h3>
-                <p>{review.body}</p>
-                <footer><strong>{review.author}</strong><span>{review.source}</span></footer>
-              </article>
-            ))}
+          {/* Four copies keep each half of the loop wider than even ultra-wide screens; copies are hidden from screen readers. */}
+          <div className="testimonial-marquee" data-reveal>
+            <div className="testimonial-track">
+              {[...testimonials, ...testimonials, ...testimonials, ...testimonials].map((review, index) => (
+                <article className="testimonial" key={`${review.title}-${index}`} aria-hidden={index >= testimonials.length || undefined}>
+                  <div className="stars">{Array.from({ length: 5 }).map((_, star) => <Icon name="star" key={star} />)}</div>
+                  <h3>{review.title}</h3>
+                  <p>{review.body}</p>
+                  <footer><strong>{review.author}</strong><span>{review.source}</span></footer>
+                </article>
+              ))}
+            </div>
           </div>
 
           <div className="photo-review-heading">
-            <span>PHOTO REVIEWS</span>
             <strong>고객이 직접 남긴 사진 {reviewPhotos.length}</strong>
+            <a className="button button-outline" href="https://yulgo.co.kr/board/review/list_photo.html?board_no=4" target="_blank" rel="noreferrer">리뷰 전체 보기 <Icon name="arrow" /></a>
           </div>
-          <div className="photo-review-track" aria-label="고객 포토 리뷰">
-            {reviewPhotos.map((image, index) => (
-              <button type="button" key={image} onClick={() => setSelectedPhoto(image)} aria-label={`${index + 1}번째 고객 후기 사진 크게 보기`}>
-                <img src={image} loading="lazy" alt={`고객 포토 리뷰 ${index + 1}`} />
-              </button>
-            ))}
+          {/* Rolls the opposite way to the reviews above; the second set is a visual copy for the seamless loop. */}
+          <div className="photo-review-marquee" aria-label="고객 포토 리뷰">
+            <div className="photo-review-track">
+              {[0, 1].map((copy) => (
+                <div className="photo-review-set" key={copy} aria-hidden={copy === 1 || undefined}>
+                  {reviewPhotos.map((image, index) => (
+                    <button type="button" key={image} tabIndex={copy === 1 ? -1 : undefined} onClick={() => setSelectedPhoto(image)} aria-label={`${index + 1}번째 고객 후기 사진 크게 보기`}>
+                      <img src={image} loading="lazy" alt={`고객 포토 리뷰 ${index + 1}`} />
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
-          <a className="button button-outline" href="https://yulgo.co.kr/board/review/list_photo.html?board_no=4" target="_blank" rel="noreferrer">리뷰 전체 보기 <Icon name="arrow" /></a>
         </section>
 
         <section id="brand" className="brand-story">
           <img className="brand-story-bg" src={brandImages.storyHero} alt="자연 속 율고 브랜드 이야기" />
           <div className="brand-story-shade" />
           <div className="brand-story-copy" data-reveal>
-            <span className="eyebrow">ABOUT YULGO</span>
-            <h2>국내산 본초를 이용한<br />바이오 고기능성 헤어케어</h2>
+            <h2>국내산 본초를 이용한<br className="br-wide" /> 바이오 <span className="keep">고기능성 헤어케어</span></h2>
             <p>국내산 본초를 이용하여 안전하고 확실하게 헤어케어를 책임지는 ‘율고’</p>
           </div>
         </section>
@@ -582,22 +693,10 @@ function App() {
             <img src={brandImages.storySquare} alt="율고 제품에 담긴 자연 유래 원료" />
           </div>
           <div className="manifesto-copy" data-reveal>
-            <span className="eyebrow">OUR PROMISE</span>
             <h2>믿을 수 있는 국내산 본초를<br />사용하여 생산합니다.</h2>
             <p>국내산 본초들을 활용해 믿고 사용할 수 있는 저자극 고기능 헤어케어 제품을 생산합니다. 엄격한 품질과 생산과정을 거쳐 고객의 만족을 이끌어 낼 수 있는 프리미엄 헤어케어 제품을 제안합니다.</p>
-            <div className="manifesto-sign">Nature · Science · Time</div>
-          </div>
-        </section>
 
-        <section className="benefits-section">
-          <a href="http://pf.kakao.com/_xoqxalxj" target="_blank" rel="noreferrer" className="benefit-card kakao" data-reveal>
-            <img src={brandImages.kakaoBenefit} alt="" />
-            <div><span>KAKAO CHANNEL</span><strong>채널 추가하고<br />2,000원 할인 쿠폰</strong><em>혜택 받기 <Icon name="arrow" /></em></div>
-          </a>
-          <a href="https://yulgo.co.kr/member/join.html" target="_blank" rel="noreferrer" className="benefit-card signup" data-reveal>
-            <img src={brandImages.signupBenefit} alt="" />
-            <div><span>WELCOME BENEFIT</span><strong>회원가입 즉시<br />3,000원 적립</strong><em>가입하기 <Icon name="arrow" /></em></div>
-          </a>
+          </div>
         </section>
       </main>
 
