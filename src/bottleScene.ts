@@ -1,8 +1,6 @@
 import {
-  AdditiveBlending,
   BufferGeometry,
   CanvasTexture,
-  Float32BufferAttribute,
   Group,
   LatheGeometry,
   LinearFilter,
@@ -13,8 +11,6 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   PMREMGenerator,
-  Points,
-  PointsMaterial,
   Scene,
   SRGBColorSpace,
   Texture,
@@ -365,30 +361,6 @@ export async function createBottleScene(canvas: HTMLCanvasElement, imageUrl: str
   shadow.rotation.x = -Math.PI / 2
   scene.add(shadow)
 
-  // Drifting star field in front of and behind the bottle sells the depth as it moves.
-  const starTexture = radialTexture('rgba(255, 255, 255, 1)', 'rgba(255, 255, 255, 0)')
-  const starGeometry = new BufferGeometry()
-  const starPositions: number[] = []
-  const starColors: number[] = []
-  const palette = [[1, 0.86, 0.45], [0.82, 0.66, 1], [1, 1, 1]]
-  for (let i = 0; i < 260; i++) {
-    starPositions.push((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 9, -7 + Math.random() * 9)
-    starColors.push(...palette[i % palette.length])
-  }
-  starGeometry.setAttribute('position', new Float32BufferAttribute(starPositions, 3))
-  starGeometry.setAttribute('color', new Float32BufferAttribute(starColors, 3))
-  const starMaterial = new PointsMaterial({
-    size: 0.07,
-    map: starTexture,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.85,
-    depthWrite: false,
-    blending: AdditiveBlending,
-  })
-  const stars = new Points(starGeometry, starMaterial)
-  scene.add(stars)
-
   let viewWidth = 1
   let viewHeight = 1
   let poses = desktopPoses
@@ -417,9 +389,6 @@ export async function createBottleScene(canvas: HTMLCanvasElement, imageUrl: str
     shadow.position.set(bottle.position.x, baseY - 0.02 - float, 0)
     shadow.scale.set(bodyDiameter * scale * 2.6, bodyDiameter * scale * 1, 1)
     shadowMaterial.opacity = 0.8 - float * 4
-
-    stars.rotation.y = progress * 0.7 + pointer.x * 0.05
-    stars.position.y = (progress - 0.5) * 0.8
 
     renderer.render(scene, camera)
     frame = active && !still ? requestAnimationFrame(render) : 0
@@ -469,9 +438,9 @@ export async function createBottleScene(canvas: HTMLCanvasElement, imageUrl: str
       cancelAnimationFrame(frame)
       resizeObserver.disconnect()
       const disposables = [
-        ...geometries, shadowGeometry, starGeometry,
-        frontMaterial, backMaterial, plasticMaterial, orificeMaterial, shadowMaterial, starMaterial,
-        frontTexture, backTexture, shadowTexture, starTexture, environment,
+        ...geometries, shadowGeometry,
+        frontMaterial, backMaterial, plasticMaterial, orificeMaterial, shadowMaterial,
+        frontTexture, backTexture, shadowTexture, environment,
       ]
       for (const disposable of disposables) disposable.dispose()
       pmrem.dispose()

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { BottleScene } from './bottleScene'
 import {
@@ -23,7 +23,7 @@ type BottleChapter = {
 const heroStats = [
   { value: '2,004', unit: '+', label: '두 제품 누적 리뷰' },
   { value: '68', unit: '%', label: '7일 후 손상모 개선' },
-  { value: '3–10', unit: 'MIN', label: '샴푸하듯 간편한 루틴' },
+  { value: '3–10', unit: '분', label: '샴푸하듯 간편한 루틴' },
   { value: '35', unit: '%', label: '국내산 쌀겨수 함유' },
 ]
 
@@ -49,11 +49,6 @@ const bottleChapters: BottleChapter[] = [
     shown: [0.84, 1],
   },
 ]
-
-const heroArtwork: Record<string, string> = {
-  color: '/images/generated/yulgo-color-hero-v2.webp',
-  repair: '/images/generated/yulgo-repair-hero-v2.webp',
-}
 
 type IconName =
   | 'arrow'
@@ -89,48 +84,6 @@ function Icon({ name }: { name: IconName }) {
       {paths[name]}
     </svg>
   )
-}
-
-const shouldCount = (value: string) =>
-  /\d/.test(value) && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-// Counts every number inside a stat string ("2,004", "3–10", "68%") up from zero once it scrolls into view.
-function CountUp({ value }: { value: string }) {
-  const ref = useRef<HTMLDataElement>(null)
-  const [progress, setProgress] = useState(() => (shouldCount(value) ? 0 : 1))
-
-  useEffect(() => {
-    const element = ref.current
-    if (!element || !shouldCount(value)) return
-
-    let frame = 0
-    const observer = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return
-      observer.disconnect()
-      const start = performance.now()
-      const tick = (now: number) => {
-        const t = Math.min(1, (now - start) / 1600)
-        setProgress(1 - (1 - t) ** 3)
-        if (t < 1) frame = requestAnimationFrame(tick)
-      }
-      frame = requestAnimationFrame(tick)
-    }, { threshold: 0.5 })
-    observer.observe(element)
-    return () => {
-      observer.disconnect()
-      cancelAnimationFrame(frame)
-    }
-  }, [value])
-
-  const live = value.replace(/\d[\d,]*(?:\.\d+)?/g, (token) => {
-    const decimals = token.split('.')[1]?.length ?? 0
-    const current = Number(token.replace(/,/g, '')) * progress
-    if (decimals) return current.toFixed(decimals)
-    return token.includes(',') ? Math.round(current).toLocaleString('ko-KR') : String(Math.round(current))
-  })
-
-  // A <data> element so stat-block `span` rules (font size, margins) never reach the digits.
-  return <data className="count-up" ref={ref} value={value}>{live}</data>
 }
 
 function ProductModal({ product, onClose }: { product: Product; onClose: () => void }) {
@@ -189,7 +142,7 @@ function ProductModal({ product, onClose }: { product: Product; onClose: () => v
             <div className="modal-facts">
               {product.facts.map((fact) => (
                 <div key={fact.label}>
-                  <strong><CountUp value={fact.value} /></strong>
+                  <strong>{fact.value}</strong>
                   <span>{fact.label}</span>
                 </div>
               ))}
@@ -316,10 +269,6 @@ function BottleScroll({ onExplore }: { onExplore: () => void }) {
         onPointerMove={onPointerMove}
         onPointerLeave={() => sceneRef.current?.setPointer(0, 0)}
       >
-        <div className="bottle-sky" aria-hidden="true">
-          <span className="bottle-moon" />
-          <span className="bottle-wordmark">MIRACLE 7</span>
-        </div>
         <img className="bottle-fallback" src={bottleImage} alt="율고 자연을 담은 시간 미라클7 퀵커버 블랙 샴푸 자연갈색" />
         <canvas ref={canvasRef} className="bottle-canvas" aria-hidden="true" />
 
@@ -332,7 +281,7 @@ function BottleScroll({ onExplore }: { onExplore: () => void }) {
                 <p>{item.body}</p>
                 {index === bottleChapters.length - 1 && (
                   <button className="button button-light" type="button" onClick={onExplore}>
-                    제품 경험하기 <Icon name="arrow" />
+                    제품 자세히 보기 <Icon name="arrow" />
                   </button>
                 )}
               </div>
@@ -356,7 +305,6 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
   const [videoPlaying, setVideoPlaying] = useState(false)
 
   const activeProduct = products[heroIndex]
@@ -366,36 +314,6 @@ function App() {
       setHeroIndex((current) => (current + 1) % products.length)
     }, 6500)
     return () => window.clearInterval(timer)
-  }, [])
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
-  useEffect(() => {
-    const updateScrollEffects = () => {
-      const scrollable = document.documentElement.scrollHeight - window.innerHeight
-      const progress = scrollable > 0 ? Math.min(window.scrollY / scrollable, 1) : 0
-      document.documentElement.style.setProperty('--scroll-progress', `${progress * 100}%`)
-      document.documentElement.style.setProperty('--page-shift', `${Math.min(window.scrollY * 0.04, 80)}px`)
-    }
-
-    updateScrollEffects()
-    window.addEventListener('scroll', updateScrollEffects, { passive: true })
-    return () => window.removeEventListener('scroll', updateScrollEffects)
-  }, [])
-
-  useEffect(() => {
-    const elements = document.querySelectorAll<HTMLElement>('[data-reveal]')
-    const observer = new IntersectionObserver(
-      (entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add('is-visible')),
-      { threshold: 0.12 },
-    )
-    elements.forEach((element) => observer.observe(element))
-    return () => observer.disconnect()
   }, [])
 
   useEffect(() => {
@@ -417,32 +335,16 @@ function App() {
 
   const closeMenu = () => setMenuOpen(false)
 
-  const updateTilt = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.pointerType === 'touch') return
-    const bounds = event.currentTarget.getBoundingClientRect()
-    const x = (event.clientX - bounds.left) / bounds.width
-    const y = (event.clientY - bounds.top) / bounds.height
-    event.currentTarget.style.setProperty('--tilt-x', `${(0.5 - y) * 7}deg`)
-    event.currentTarget.style.setProperty('--tilt-y', `${(x - 0.5) * 9}deg`)
-  }
-
-  const resetTilt = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.currentTarget.style.setProperty('--tilt-x', '0deg')
-    event.currentTarget.style.setProperty('--tilt-y', '0deg')
-  }
-
   return (
     <div className="site-shell">
-      <div className="scroll-progress" aria-hidden="true"><span /></div>
       <a className="skip-link" href="#main">본문으로 바로가기</a>
 
       <div className="announcement">
-        <span className="announcement-kakao">TALK</span>
         카톡 친구 추가 시 <strong>2,000원 할인 쿠폰</strong>
         <a href="http://pf.kakao.com/_xoqxalxj" target="_blank" rel="noreferrer">혜택 받기 <Icon name="arrow" /></a>
       </div>
 
-      <header className={`site-header ${scrolled ? 'scrolled' : ''}`}>
+      <header className="site-header">
         <a href="#top" className="brand" aria-label="율고 홈">
           <img src={brandImages.logo} alt="yulgo" />
         </a>
@@ -485,66 +387,65 @@ function App() {
       </div>
 
       <main id="main">
-        <section id="top" className={`hero hero-${activeProduct.id}`} aria-label="율고 대표 상품">
-          <span className="hero-wordmark" aria-hidden="true">YULGO</span>
-          <div className="hero-media" aria-live="polite">
-            {products.map((product, index) => (
-              <picture className={index === heroIndex ? 'active' : ''} key={product.id}>
-                <source media="(max-width: 700px)" srcSet={product.mobileHero} />
-                <img src={heroArtwork[product.id] ?? product.hero} alt="" />
-              </picture>
-            ))}
-          </div>
-          <div className="hero-inner">
-            <div className="hero-copy" key={activeProduct.id}>
-              {activeProduct.id === 'color' ? (
-                <h1>새치는 가볍게,<br /><em>자연은 깊게.</em></h1>
-              ) : (
-                <h1>손상은 가볍게,<br /><em>윤기는 깊게.</em></h1>
-              )}
-              <p>{activeProduct.id === 'color' ? '3–10분, 샴푸하듯 간편하게 시작하는 두피 저자극 새치 케어' : '쌀겨수와 생강추출물로 채우는 데일리 고농축 데미지 리페어'}</p>
-              <div className="hero-actions">
-                <button className="button button-dark" type="button" onClick={() => setSelectedProduct(activeProduct)}>
-                  제품 경험하기 <Icon name="arrow" />
-                </button>
-                <a className="text-link" href={activeProduct.link} target="_blank" rel="noreferrer">공식몰 구매 <Icon name="arrow" /></a>
+        <section id="top" className="hero" aria-label="율고 대표 상품">
+          <div className="hero-stage">
+            <div className="hero-media" aria-live="polite">
+              {products.map((product, index) => (
+                <picture className={index === heroIndex ? 'active' : ''} key={product.id}>
+                  <source media="(max-width: 820px)" srcSet={product.mobileHero} />
+                  <img src={product.hero} alt="" />
+                </picture>
+              ))}
+            </div>
+            <div className="hero-inner">
+              <div className="hero-copy" key={activeProduct.id}>
+                {activeProduct.id === 'color' ? (
+                  <h1>새치는 가볍게,<br /><em>자연은 깊게.</em></h1>
+                ) : (
+                  <h1>손상은 가볍게,<br /><em>윤기는 깊게.</em></h1>
+                )}
+                <p>{activeProduct.id === 'color' ? '3–10분, 샴푸하듯 간편하게 시작하는 두피 저자극 새치 케어' : '쌀겨수와 생강추출물로 채우는 데일리 고농축 데미지 리페어'}</p>
+                <div className="hero-actions">
+                  <button className="button button-dark" type="button" onClick={() => setSelectedProduct(activeProduct)}>
+                    제품 자세히 보기 <Icon name="arrow" />
+                  </button>
+                  <a className="text-link" href={activeProduct.link} target="_blank" rel="noreferrer">공식몰 구매 <Icon name="arrow" /></a>
+                </div>
               </div>
+            </div>
+
+            <div className="hero-controls">
+              <button type="button" onClick={() => setHeroIndex((heroIndex - 1 + products.length) % products.length)} aria-label="이전 상품"><Icon name="chevronLeft" /></button>
+              <div className="hero-progress">
+                {products.map((product, index) => (
+                  <button key={product.id} type="button" className={index === heroIndex ? 'active' : ''} onClick={() => setHeroIndex(index)} aria-label={`${product.shortName} 보기`} />
+                ))}
+              </div>
+              <button type="button" onClick={() => setHeroIndex((heroIndex + 1) % products.length)} aria-label="다음 상품"><Icon name="chevronRight" /></button>
             </div>
           </div>
 
           <div className="hero-proof" aria-label="율고 핵심 수치">
             {heroStats.map((stat) => (
               <div key={stat.label}>
-                <strong><CountUp value={stat.value} /><small>{stat.unit}</small></strong>
+                <strong>{stat.value}<small>{stat.unit}</small></strong>
                 <span>{stat.label}</span>
               </div>
             ))}
           </div>
-
-          <div className="hero-controls">
-            <button type="button" onClick={() => setHeroIndex((heroIndex - 1 + products.length) % products.length)} aria-label="이전 상품"><Icon name="chevronLeft" /></button>
-            <div className="hero-progress">
-              {products.map((product, index) => (
-                <button key={product.id} type="button" className={index === heroIndex ? 'active' : ''} onClick={() => setHeroIndex(index)} aria-label={`${product.shortName} 보기`} />
-              ))}
-            </div>
-            <button type="button" onClick={() => setHeroIndex((heroIndex + 1) % products.length)} aria-label="다음 상품"><Icon name="chevronRight" /></button>
-          </div>
         </section>
 
         <section id="products" className="section products-section">
-          <div className="section-heading" data-reveal>
+          <div className="section-heading">
             <h2>오늘의 모발에 필요한<br /><em>두 가지 자연의 시간</em></h2>
             <p>새치 커버부터 손상모 리페어까지. 율고의 두 제품을 한눈에 비교해 보세요.</p>
           </div>
 
           <div className="product-grid">
-            {products.map((product, index) => (
-              <article className={`product-card product-card-${product.id}`} data-reveal key={product.id} style={{ '--delay': `${index * 120}ms` } as React.CSSProperties}>
-                <span className="product-card-number" aria-hidden="true">0{index + 1}</span>
-                <button className="product-image-button" type="button" onPointerMove={updateTilt} onPointerLeave={resetTilt} onClick={() => setSelectedProduct(product)} aria-label={`${product.shortName} 상세 보기`}>
+            {products.map((product) => (
+              <article className="product-card" key={product.id}>
+                <button className="product-image-button" type="button" onClick={() => setSelectedProduct(product)} aria-label={`${product.shortName} 상세 보기`}>
                   <img src={product.image} alt={product.shortName} />
-                  <span>VIEW DETAILS <Icon name="plus" /></span>
                 </button>
                 <div className="product-info">
                   <h3>{product.shortName}</h3>
@@ -564,7 +465,7 @@ function App() {
             ))}
           </div>
 
-          <div className="benefit-strip" data-reveal>
+          <div className="benefit-strip">
             <a className="benefit-item" href="http://pf.kakao.com/_xoqxalxj" target="_blank" rel="noreferrer">
               <img src={brandImages.kakaoBenefit} alt="" />
               <span className="benefit-text"><small>카카오톡 채널</small><strong>채널 추가하고 2,000원 할인 쿠폰</strong></span>
@@ -578,41 +479,20 @@ function App() {
           </div>
         </section>
 
-        <section className="kinetic-band" aria-label="율고 브랜드 키워드">
-          {/* Each half repeats the words four times so it is wider than even a 4K screen; the loop never shows a gap. */}
-          <div className="kinetic-track" aria-hidden="true">
-            {[0, 1].map((loop) => (
-              <div key={loop}>
-                {[0, 1, 2, 3].map((repeat) => (
-                  <Fragment key={repeat}>
-                    <span>NATURE</span><i>×</i><span>SCIENCE</span><i>×</i><span>TIME</span><i>×</i><strong>YULGO</strong><i>×</i>
-                  </Fragment>
-                ))}
-              </div>
-            ))}
-          </div>
-        </section>
-
         <section id="ritual" className="ritual-section">
           <img src={brandImages.ritual} alt="풍성한 거품과 함께 사용하는 율고 블루밍 리페어 샴푸" />
           <div className="ritual-overlay" />
-          <span className="ritual-wordmark" aria-hidden="true">RITUAL</span>
-          <div className="ritual-copy" data-reveal>
+          <div className="ritual-copy">
             <h2>씻어내는 <span className="keep">짧은 시간도</span><br /><em>모발을 위한 <span className="keep">케어가 되도록.</span></em></h2>
             <p>국내산 본초와 기능성 원료를 세심하게 배합해 편안한 사용감과 눈에 보이는 변화를 함께 고민합니다.</p>
             <a className="button button-light" href="#guide">사용 루틴 보기 <Icon name="arrow" /></a>
-          </div>
-          <div className="ritual-stats">
-            <div><strong><CountUp value="35" /><small>%</small></strong><span>쌀겨수 함유</span></div>
-            <div><strong><CountUp value="68" /><small>%</small></strong><span>7일 후 손상모 개선</span></div>
-            <div><strong>EXCELLENT</strong><span>더마테스트 등급</span></div>
           </div>
         </section>
 
         <BottleScroll onExplore={() => setSelectedProduct(products[0])} />
 
         <section id="guide" className="guide-section">
-          <div className="guide-video" data-reveal>
+          <div className="guide-video">
             {videoPlaying ? (
               <iframe
                 src="https://www.youtube.com/embed/Aq_ySgeEA08?autoplay=1&rel=0"
@@ -624,11 +504,10 @@ function App() {
               <button className="guide-poster" type="button" onClick={() => setVideoPlaying(true)} aria-label="율고 사용방법 영상 재생">
                 <img src={products[0].image} alt="율고 새치 염색샴푸 사용방법 영상 미리보기" />
                 <span><Icon name="play" /></span>
-                <em>PLAY GUIDE FILM</em>
               </button>
             )}
           </div>
-          <div className="guide-copy" data-reveal>
+          <div className="guide-copy">
             <h2>바쁜 하루에도<br /><em>샴푸하듯 간편하게</em></h2>
             <div className="steps">
               <div><span>01</span><p><strong>마른 모발에 도포</strong>새치가 신경 쓰이는 뿌리와 헤어라인부터 고르게 발라주세요.</p></div>
@@ -640,59 +519,49 @@ function App() {
         </section>
 
         <section id="reviews" className="reviews-section">
-          <div className="reviews-heading section-heading" data-reveal>
+          <div className="reviews-heading section-heading">
             <h2>먼저 써본 고객들의<br /><em>솔직한 변화 이야기</em></h2>
             <p>기존 율고 공식몰과 외부 구매처에 등록된 실제 구매 후기를 옮겼습니다.</p>
           </div>
 
-          {/* Four copies keep each half of the loop wider than even ultra-wide screens; copies are hidden from screen readers. */}
-          <div className="testimonial-marquee" data-reveal>
-            <div className="testimonial-track">
-              {[...testimonials, ...testimonials, ...testimonials, ...testimonials].map((review, index) => (
-                <article className="testimonial" key={`${review.title}-${index}`} aria-hidden={index >= testimonials.length || undefined}>
-                  <div className="stars">{Array.from({ length: 5 }).map((_, star) => <Icon name="star" key={star} />)}</div>
-                  <h3>{review.title}</h3>
-                  <p>{review.body}</p>
-                  <footer><strong>{review.author}</strong><span>{review.source}</span></footer>
-                </article>
-              ))}
-            </div>
+          <div className="testimonial-list">
+            {testimonials.map((review) => (
+              <article className="testimonial" key={review.title}>
+                <div className="stars">{Array.from({ length: 5 }).map((_, star) => <Icon name="star" key={star} />)}</div>
+                <h3>{review.title}</h3>
+                <p>{review.body}</p>
+                <footer><strong>{review.author}</strong><span>{review.source}</span></footer>
+              </article>
+            ))}
           </div>
 
           <div className="photo-review-heading">
             <strong>고객이 직접 남긴 사진 {reviewPhotos.length}</strong>
             <a className="button button-outline" href="https://yulgo.co.kr/board/review/list_photo.html?board_no=4" target="_blank" rel="noreferrer">리뷰 전체 보기 <Icon name="arrow" /></a>
           </div>
-          {/* Rolls the opposite way to the reviews above; the second set is a visual copy for the seamless loop. */}
-          <div className="photo-review-marquee" aria-label="고객 포토 리뷰">
-            <div className="photo-review-track">
-              {[0, 1].map((copy) => (
-                <div className="photo-review-set" key={copy} aria-hidden={copy === 1 || undefined}>
-                  {reviewPhotos.map((image, index) => (
-                    <button type="button" key={image} tabIndex={copy === 1 ? -1 : undefined} onClick={() => setSelectedPhoto(image)} aria-label={`${index + 1}번째 고객 후기 사진 크게 보기`}>
-                      <img src={image} loading="lazy" alt={`고객 포토 리뷰 ${index + 1}`} />
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
+          <div className="photo-review-grid" aria-label="고객 포토 리뷰">
+            {reviewPhotos.map((image, index) => (
+              <button type="button" key={image} onClick={() => setSelectedPhoto(image)} aria-label={`${index + 1}번째 고객 후기 사진 크게 보기`}>
+                <img src={image} loading="lazy" alt={`고객 포토 리뷰 ${index + 1}`} />
+              </button>
+            ))}
           </div>
         </section>
 
         <section id="brand" className="brand-story">
           <img className="brand-story-bg" src={brandImages.storyHero} alt="자연 속 율고 브랜드 이야기" />
           <div className="brand-story-shade" />
-          <div className="brand-story-copy" data-reveal>
+          <div className="brand-story-copy">
             <h2>국내산 본초를 이용한<br className="br-wide" /> 바이오 <span className="keep">고기능성 헤어케어</span></h2>
             <p>국내산 본초를 이용하여 안전하고 확실하게 헤어케어를 책임지는 ‘율고’</p>
           </div>
         </section>
 
         <section className="brand-manifesto">
-          <div className="manifesto-image" data-reveal>
+          <div className="manifesto-image">
             <img src={brandImages.storySquare} alt="율고 제품에 담긴 자연 유래 원료" />
           </div>
-          <div className="manifesto-copy" data-reveal>
+          <div className="manifesto-copy">
             <h2>믿을 수 있는 국내산 본초를<br />사용하여 생산합니다.</h2>
             <p>국내산 본초들을 활용해 믿고 사용할 수 있는 저자극 고기능 헤어케어 제품을 생산합니다. 엄격한 품질과 생산과정을 거쳐 고객의 만족을 이끌어 낼 수 있는 프리미엄 헤어케어 제품을 제안합니다.</p>
 
